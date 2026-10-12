@@ -1,0 +1,5 @@
+C:/rea-labs/notes-example 에 있는 Electron 예제의 CSV 내보내기 기능이 어떻게 작동하는지 REA로 조사해 줘.
+
+renderer, preload, IPC, main process의 호출 관계를 분석하고, 실제 코드 위치와 Evidence를 제시해 줘.
+
+확인한 사실과 추정한 내용을 구분하고, 마지막에는 이 동작을 독립적으로 재구현하는 방법을 제안해 줘.

@@ -1,0 +1,1 @@
+REA로 C:/rea-labs/notes-example 를 분석해서 IPC 채널이 몇 개인지만 알려줘.

@@ -1,0 +1,1 @@
+const fs = require("fs"); const app = JSON.parse(fs.readFileSync("notes-analysis.json", "utf8")); fs.writeFileSync("trace-input.json", JSON.stringify({ application: app, seed: { kind: "channel", value: "notes:export", match: "exact" }, direction: "both" }));

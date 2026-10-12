@@ -1,0 +1,5 @@
+REA로 C:/rea-labs/notes-example 의 CSV 변환 동작(main.js가 호출하는 toCsv)을 조사해서, 입력과 출력 규칙을 동작 명세로 정리해 줘. 명세에는 REA Evidence로 확인한 것과 소스를 읽어 확인한 것을 구분해 적어 줘.
+
+그다음 원본 코드를 복사하지 말고 그 명세만 보고 C:/rea-labs/csv-reimpl/csv.mjs 에 같은 동작을 하는 toCsv 함수를 독립적으로 구현해 줘.
+
+마지막으로 C:/rea-labs/csv-reimpl/compare.mjs 를 만들어서 원본 notes-example/csv.js 와 새 구현에 같은 입력 여러 개(빈 배열, 쉼표·큰따옴표·줄바꿈·한글이 들어간 제목 포함)를 넣고 출력이 바이트 단위로 같은지 비교한 뒤, node 로 실행해서 결과를 보여 줘.
