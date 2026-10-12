@@ -1,8 +1,8 @@
 # rea-tutorial
 
-<a href="https://wikidocs.net/book/21639"><img src="assets/book-cover.png" alt="REA 따라하기 책 표지" width="300" align="right"></a>
-
 위키독스 책 **《REA 따라하기》 — AI 에이전트로 소프트웨어 역공학부터 기능 재구현까지**의 실습 자료 저장소입니다.
+
+<a href="https://wikidocs.net/book/21639"><img src="assets/book-cover.png" alt="REA 따라하기 책 표지" width="300"></a>
 
 - 책: https://wikidocs.net/book/21639
 - REA 공식 저장소: https://github.com/morluto/rea
