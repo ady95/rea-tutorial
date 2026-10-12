@@ -1,0 +1,5 @@
+C:/rea-labs/web/notes-web.har 는 https://rea.tools/examples/notes-web/ 페이지에서 Export notes 버튼을 한 번 누르는 동안 저장한 HAR 파일이야.
+
+REA로 이 HAR 파일을 분석해서, 버튼을 누르면 어떤 네트워크 요청이 오가고 CSV 파일이 어디서 어떻게 만들어지는지 재구성해 줘.
+
+요청마다 HAR의 레코드 번호를 근거로 제시하고, HAR에서 확인한 사실과 추정한 내용을 구분해 줘.

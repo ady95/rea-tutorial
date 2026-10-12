@@ -1,0 +1,8 @@
+C:/rea-labs/memo-bin/app.asar 는 내가 만든 Electron 앱 "Memo Stats"를 배포 형태로 묶은 파일이야(코드는 번들링·압축됨). 소스 코드는 없다고 가정해 줘.
+
+이 앱에서 메모 텍스트의 통계를 계산하는 기능을 독립된 Node.js 모듈로 재구현하는 프로젝트를 진행해 줘. 작업 폴더는 C:/rea-labs/memo-reimpl 이야.
+
+1. REA로 app.asar를 분석해서 통계 기능이 어떤 IPC 채널로 호출되고, 입력과 출력이 무엇이며, 어떤 규칙으로 계산되는지 찾아 REQUIREMENTS.md 로 정리해 줘. 각 요구사항에 근거(REA Evidence, 압축된 코드에서 직접 읽은 것, 추론)를 구분해 표시해 줘.
+2. 원본 코드를 복사하지 말고 REQUIREMENTS.md 만 보고 summarize.mjs 에 같은 동작을 하는 함수를 작성해 줘.
+3. 원본 동작과 비교하려면 원본 main 프로세스 코드를 실행해야 하는데 electron 모듈이 없어. electron 모듈을 가짜로 대신해서 원본이 ipcMain.handle 로 등록한 처리기를 꺼내 호출하는 하네스 harness.mjs 를 만들어 줘.
+4. 원본 처리기와 재구현을 같은 입력으로 비교하는 자동 테스트를 node:test 로 compare.test.mjs 에 작성하고 node --test 로 실행해서 결과를 보여 줘. 입력에는 빈 문자열, 줄바꿈 종류(LF/CRLF), 공백만 있는 줄, 한글·영문 태그, 대소문자, 태그 동점 정렬, 긴 텍스트를 포함해 줘.

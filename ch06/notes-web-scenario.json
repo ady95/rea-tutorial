@@ -1,0 +1,20 @@
+{
+  "browser": {
+    "mode": "launch",
+    "executable_path": "C:/Program Files/Google/Chrome/Application/chrome.exe"
+  },
+  "start_url": { "url": "https://rea.tools/examples/notes-web/" },
+  "actions": [
+    {
+      "step_id": "export",
+      "action": "click",
+      "locator": { "kind": "css", "selector": "#export" },
+      "timeout_ms": 10000
+    },
+    { "step_id": "settle", "action": "wait_for_timeout", "duration_ms": 1500 }
+  ],
+  "capture": {
+    "events": ["network"],
+    "network": { "response_body": true }
+  }
+}

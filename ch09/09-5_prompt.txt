@@ -1,0 +1,7 @@
+C:/rea-labs/native-bin/tagcode.exe 는 문자열 하나를 인자로 받아 코드와 등급을 출력하는 Windows 프로그램이야. 소스 코드는 없어.
+
+REA로 이 실행 파일을 분석해서 코드와 등급을 계산하는 로직을 찾아 동작 명세로 정리해 줘. 명세의 각 항목에 REA Evidence(디컴파일 결과, 문자열, 참조)로 확인한 것과 추론한 것을 구분해 적어 줘.
+
+그다음 그 명세만 보고 같은 동작을 하는 C 프로그램을 C:/rea-labs/native-bin/tagcode_re.c 로 작성하고, "C:/tools/zig-x86_64-windows-0.17.0/zig.exe cc -O2 -target x86_64-windows-gnu -o C:/rea-labs/native-bin/tagcode_re.exe C:/rea-labs/native-bin/tagcode_re.c" 로 컴파일해 줘.
+
+마지막으로 원본 tagcode.exe 와 tagcode_re.exe 에 같은 입력 여러 개를 넣어 출력과 종료 코드가 같은지 비교하는 C:/rea-labs/native-bin/compare.mjs 를 만들고 node 로 실행해서 결과를 보여 줘. 입력은 ASCII 문자열로 해 줘.

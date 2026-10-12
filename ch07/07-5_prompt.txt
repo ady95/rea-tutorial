@@ -1,0 +1,7 @@
+C:/rea-labs/dotnet-bin/ShippingFee.dll 은 배송비를 계산하는 .NET 프로그램이야. 소스 코드는 없어.
+
+REA로 이 DLL을 분석해서 배송비를 계산하는 메서드의 계산 규칙을 동작 명세로 정리해 줘. 명세의 각 항목에 REA Evidence로 확인한 것과 추론한 것을 구분해 적어 줘.
+
+그다음 그 명세만 보고 같은 규칙을 JavaScript 함수로 다시 구현해서 C:/rea-labs/dotnet-bin/fee.mjs 에 저장해 줘.
+
+마지막으로 원본 프로그램을 "dotnet C:/rea-labs/dotnet-bin/ShippingFee.dll <무게(g)> <지역> [express]" 형식으로 실행한 결과와 재구현 결과를 여러 입력에서 비교하는 C:/rea-labs/dotnet-bin/compare.mjs 를 만들고 node 로 실행해서 결과를 보여 줘.
