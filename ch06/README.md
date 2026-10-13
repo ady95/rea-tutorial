@@ -11,6 +11,7 @@
 | 06-5_prompt.txt | 06-5 HAR로 기능 재구성 프롬프트 |
 
 ```powershell
+New-Item -ItemType Directory -Force C:/rea-labs/web
 cd C:/rea-labs/web
 cmd /c "rea capture-browser-scenario notes-web-scenario.json --json > scenario.json 2> scenario.log"
 node make-har.cjs "$(npm root -g)/rea-agents/node_modules/playwright-core"
