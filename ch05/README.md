@@ -19,7 +19,7 @@ Expand-Archive notes-example.zip -DestinationPath .
 | 경로 | 내용 | 본문 |
 |---|---|---|
 | prompts/ | 실습에 쓴 프롬프트 원문 | 05-5 |
-| scripts/try-csv.js | toCsv 출력 확인 | 05-2 |
+| scripts/try-csv.js | toCsv 출력 확인 (C:/rea-labs에 복사해 실행, 예제 폴더 안에 두지 말 것) | 05-2 |
 | scripts/make-trace-input.js | CLI trace 입력 JSON 생성 | 05-4 |
 | csv-reimpl/ | 재구현 맛보기 결과 (Claude Code가 생성) | 05-5 실습 3 |
 
