@@ -9,7 +9,8 @@ function extractTags(text) {
   }
   return [...counts.entries()]
     .map(([tag, count]) => ({ tag, count }))
-    .sort((a, b) => b.count - a.count || (a.tag < b.tag ? -1 : a.tag > b.tag ? 1 : 0))
+    .sort((a, b) =>
+      b.count - a.count || (a.tag < b.tag ? -1 : a.tag > b.tag ? 1 : 0))
     .slice(0, 3);
 }
 
