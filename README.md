@@ -4,7 +4,6 @@
 
 <a href="https://wikidocs.net/book/21639"><img src="assets/book-cover.png" alt="REA 따라하기 책 표지" width="300"></a>
 
-- 책: https://wikidocs.net/book/21639
 - REA 공식 저장소: https://github.com/morluto/rea
 
 ## 책 구매
