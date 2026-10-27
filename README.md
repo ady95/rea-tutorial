@@ -7,6 +7,12 @@
 - 책: https://wikidocs.net/book/21639
 - REA 공식 저장소: https://github.com/morluto/rea
 
+## 책 구매
+
+- YES24: https://www.yes24.com/product/goods/198291129
+- 교보문고: https://ebook-product.kyobobook.co.kr/dig/epd/ebook/E000013698430
+- 위키독스: https://wikidocs.net/book/21639
+
 ## 검증 기준
 
 | 항목 | 버전 |
