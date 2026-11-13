@@ -1,45 +1,43 @@
-// 원본 Memo Stats의 main 프로세스 코드를 Electron 없이 실행하는 하네스.
+// Runs the original Memo Stats main-process code without Electron.
 //
-// - app.asar 를 직접 파싱해 package.json 의 main 엔트리(main.js)를 읽는다.
-// - require("electron") 만 가짜 모듈로 바꾸고, 나머지 require 는 Node 에 맡긴다.
-// - 원본이 ipcMain.handle 로 등록한 처리기를 모아 invoke() 로 호출할 수 있게 한다.
-// - invoke() 는 Electron IPC 처럼 인자와 결과를 structuredClone 으로 복제한다.
+// main.js is read straight out of app.asar (no extraction, no copy on disk),
+// evaluated as a CommonJS module whose `require("electron")` returns a fake.
+// The fake ipcMain records every ipcMain.handle registration so tests can call
+// the original handler directly.
 
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { createRequire } from "node:module";
+import { builtinModules, createRequire, Module } from "node:module";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
-export const DEFAULT_ASAR = process.env.MEMO_ASAR ?? "C:/rea-labs/memo-bin/app.asar";
+const here = path.dirname(fileURLToPath(import.meta.url));
 
-// asar 형식: [u32 4][u32 headerPickleSize] + header pickle([u32 payload][u32 jsonLen][json]) + 파일 데이터
-export function readAsar(asarPath) {
-  const buf = readFileSync(asarPath);
-  const headerPickleSize = buf.readUInt32LE(4);
-  const jsonLen = buf.readUInt32LE(12);
-  const header = JSON.parse(buf.toString("utf8", 16, 16 + jsonLen));
-  const dataBase = 8 + headerPickleSize;
+export const DEFAULT_ASAR_PATH =
+  process.env.MEMO_ASAR ?? path.resolve(here, "../memo-bin/app.asar");
 
-  function entry(relPath) {
-    let node = header;
-    for (const part of relPath.split("/")) {
-      node = node.files?.[part];
-      if (!node) throw new Error(`asar에 ${relPath} 가 없습니다: ${asarPath}`);
-    }
-    return node;
+/**
+ * Read one file from an ASAR archive.
+ * Layout: [u32 4][u32 headerPickleSize] then a pickle holding
+ * [u32 payload][u32 jsonLength][json…]; file data starts at 8 + headerPickleSize.
+ */
+export function readAsarEntry(asarPath, entryPath) {
+  const archive = readFileSync(asarPath);
+  const headerPickleSize = archive.readUInt32LE(4);
+  const jsonLength = archive.readUInt32LE(12);
+  const header = JSON.parse(archive.toString("utf8", 16, 16 + jsonLength));
+
+  let node = header;
+  for (const part of entryPath.split("/")) {
+    node = node.files?.[part];
+    if (!node) throw new Error(`${entryPath} not found in ${asarPath}`);
   }
+  if (node.unpacked) throw new Error(`${entryPath} is unpacked; not inside the archive`);
+  if (node.offset === undefined) throw new Error(`${entryPath} is not a regular file`);
 
-  return {
-    header,
-    readFile(relPath) {
-      const e = entry(relPath);
-      if (e.unpacked) {
-        return readFileSync(path.join(`${asarPath}.unpacked`, relPath), "utf8");
-      }
-      const start = dataBase + Number(e.offset);
-      return buf.toString("utf8", start, start + e.size);
-    },
-  };
+  const start = 8 + headerPickleSize + Number(node.offset);
+  return archive.subarray(start, start + node.size);
 }
 
 function createFakeElectron() {
@@ -49,95 +47,91 @@ function createFakeElectron() {
   const ipcMain = {
     handle(channel, listener) {
       if (handlers.has(channel)) {
-        // 실제 Electron 과 같은 동작: 같은 채널에 두 번째 handle 은 오류
+        // Electron throws on a second handler for the same channel.
         throw new Error(`Attempted to register a second handler for '${channel}'`);
       }
       handlers.set(channel, listener);
     },
     handleOnce(channel, listener) {
-      ipcMain.handle(channel, listener);
+      this.handle(channel, (...args) => {
+        handlers.delete(channel);
+        return listener(...args);
+      });
     },
     removeHandler(channel) {
       handlers.delete(channel);
     },
     on() {},
     once() {},
+    removeListener() {},
   };
 
   class BrowserWindow {
-    constructor(options) {
+    constructor(options = {}) {
       this.options = options;
       this.loaded = null;
       windows.push(this);
     }
     loadFile(file) {
-      this.loaded = file;
+      this.loaded = { file };
       return Promise.resolve();
     }
     loadURL(url) {
-      this.loaded = url;
+      this.loaded = { url };
       return Promise.resolve();
     }
+    on() {}
   }
 
   const app = {
-    // 창 생성 경로까지 실행되도록 즉시 resolve 한다. BrowserWindow 는 기록만 하는 가짜다.
     whenReady: () => Promise.resolve(),
+    isReady: () => true,
     on() {},
     quit() {},
   };
 
-  const electron = { app, BrowserWindow, ipcMain };
-  return { electron, handlers, windows };
+  return { electron: { app, BrowserWindow, ipcMain }, handlers, windows };
 }
 
 /**
- * 원본 main 엔트리를 가짜 electron 으로 실행하고 등록된 IPC 처리기를 돌려준다.
- * @param {{ asarPath?: string }} [options]
+ * Evaluate the original main.js against a fake electron module.
+ * @returns {Promise<{invoke: (channel: string, ...args: unknown[]) => Promise<unknown>,
+ *                    channels: string[], windows: object[], mainSha256: string,
+ *                    asarSha256: string}>}
  */
-export function loadOriginal({ asarPath = DEFAULT_ASAR } = {}) {
-  const asar = readAsar(asarPath);
-  const pkg = JSON.parse(asar.readFile("package.json"));
-  const mainRel = (pkg.main ?? "index.js").replace(/^\.\//, "");
-  const source = asar.readFile(mainRel);
-
-  // Electron 이 asar 안 파일에 주는 것과 같은 가상 경로
-  const filename = path.join(asarPath, mainRel);
-  const dirname = path.dirname(filename);
-
+export async function loadOriginalMain({ asarPath = DEFAULT_ASAR_PATH } = {}) {
+  const source = readAsarEntry(asarPath, "main.js");
   const { electron, handlers, windows } = createFakeElectron();
+
+  // Virtual location inside the archive so __dirname-based paths look like Electron's.
+  const filename = path.join(asarPath, "main.js");
   const nodeRequire = createRequire(filename);
-  const requests = [];
-  const fakeRequire = (id) => {
-    requests.push(id);
+  const sandboxedRequire = (id) => {
     if (id === "electron") return electron;
-    return nodeRequire(id);
+    if (id.startsWith("node:") || builtinModules.includes(id)) return nodeRequire(id);
+    throw new Error(`harness: main.js required unexpected module '${id}'`);
   };
 
+  // Same realm as the tests, so deepStrictEqual sees ordinary Object/Array prototypes.
+  const wrapper = vm.runInThisContext(Module.wrap(source.toString("utf8")), { filename });
   const module = { exports: {} };
-  const wrapper = vm.compileFunction(
-    source,
-    ["exports", "require", "module", "__filename", "__dirname"],
-    { filename },
-  );
-  wrapper.call(module.exports, module.exports, fakeRequire, module, filename, dirname);
+  wrapper.call(module.exports, module.exports, sandboxedRequire, module, filename, path.dirname(filename));
 
-  // renderer 의 ipcRenderer.invoke 에 대응하는 호출
-  async function invoke(channel, ...args) {
-    const listener = handlers.get(channel);
-    if (!listener) throw new Error(`No handler registered for '${channel}'`);
-    const event = { sender: { id: 1 }, senderFrame: null, processId: 0, frameId: 0 };
-    const result = await listener(event, ...structuredClone(args));
-    return structuredClone(result);
-  }
+  // Let app.whenReady().then(...) run so window creation errors surface here.
+  await new Promise((resolve) => setImmediate(resolve));
+
+  const fakeEvent = { sender: { id: 1, send() {} }, senderFrame: null, processId: 0, frameId: 0 };
 
   return {
-    asarPath,
-    mainEntry: mainRel,
-    channels: () => [...handlers.keys()],
-    handlers,
+    async invoke(channel, ...args) {
+      const handler = handlers.get(channel);
+      if (!handler) throw new Error(`No handler registered for '${channel}'`);
+      // ipcMain.handle resolves the handler's return value (sync or async).
+      return handler(fakeEvent, ...args);
+    },
+    channels: [...handlers.keys()],
     windows,
-    requests,
-    invoke,
+    mainSha256: createHash("sha256").update(source).digest("hex"),
+    asarSha256: createHash("sha256").update(readFileSync(asarPath)).digest("hex"),
   };
 }

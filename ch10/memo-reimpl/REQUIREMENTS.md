@@ -1,107 +1,99 @@
 # Memo Stats — 메모 통계 기능 요구사항
 
-대상: `C:/rea-labs/memo-bin/app.asar` (SHA-256 `9a1a05402f8ab8bf7fecc6ecd21c71eb27eed208f6e014c5346d1dbe072ffa5a`)
+분석 대상: `C:/rea-labs/memo-bin/app.asar`
+(SHA-256 `a4cf334833b8b363f95df9a83a373366291c61edf84251c2585902ab09eefcc6`)
 
-이 문서는 재구현(`summarize.mjs`)의 유일한 입력입니다. 원본 코드 조각은 싣지 않고, 관찰된 동작을 말로 기술합니다.
+이 문서는 배포된 ASAR만 보고 작성했다. 원본 소스 저장소는 참고하지 않았다.
 
 ## 근거 표기
 
 | 표기 | 의미 |
 |---|---|
-| **[REA]** | REA 정적 분석 Evidence에서 관찰한 사실. Evidence ID와 graph node/observation을 함께 적음 |
-| **[CODE]** | REA가 추출한 압축 코드를 직접 읽고 확인한 사실. 위치는 `파일:행:컬럼범위`(0-based 컬럼) |
-| **[INFER]** | 위 두 근거와 JavaScript/Electron 의미론에서 이끌어 낸 추론. 비교 테스트로 검증할 대상 |
+| **[REA]** | REA 정적 분석이 반환한 Evidence. Evidence ID를 함께 적는다. |
+| **[코드]** | REA가 ASAR에서 꺼낸 압축(minified) 코드를 직접 읽고 확인한 것. 실행해서 관찰한 것은 아니다. |
+| **[추론]** | 위 두 가지에서 끌어낸 해석. 코드에 직접 쓰여 있지 않다. |
 
-주요 REA Evidence
+### 사용한 REA Evidence
 
-- `ev_4ed3b5a1…abf5d` — `analyze_javascript_application` 전체 분석 (parent)
-- `ev_7f1e8f0c…1b442` — `extract_artifact` (asar 구성 파일 5개 추출, 무결성 불일치 없음)
-- 분석 범위: 관련 파일 5개, JS 파싱 3개, 파싱 실패 0, IPC 연산 2개(리터럴 채널 1개, 동적 채널 0개)
+| ID | 작업 | 내용 |
+|---|---|---|
+| `ev_c62e5d8c0bb4583e57569d192a16861fcaf27b62cc5b0aeb750d58522da776c0` | `analyze_javascript_application` | 앱 그래프 전체(부모 Evidence). JS 3개를 파싱했고 파싱 실패는 0건 |
+| `ev_f0f9e03954a820cb29d5a714851f69ca00b380832b13399831f4ecfde09df7a1` | summary view | IPC 작업 2건, 리터럴 채널 1개, main handler 1개, 짝이 맞는 renderer 송신 1건, 짝 없는 송신 0건, BrowserWindow 1개, preload 1개, contextBridge API 1개(노출 멤버 1개) |
+| `ev_b27cc69786c00b3a494393fa52310b13d13180c77c36cdb0c26d30f298ec4e6f` | javascript-facts view | 노드 `jag_node_1edf616f…` (kind `ipc-channel`, channel `memo:summarize`, operation `invoke`와 `handle`), 노드 `jag_node_7fae7c8f…` (kind `ipc-handler`, channel `memo:summarize`, operation `handle`) |
+| `ev_034807a7754212bffd399b9c4fa6d78182937790469c3b1886c8e7d4906af1ff` | modules view | 모듈 `main.js`, `preload.js`, `renderer.js`. 외부 의존성은 `electron`과 `node:path`뿐 |
+| `ev_e4dedfbb14dd07ee0c38f6e481ce04822a7599ac9ed9009d9de8e97b4b38e29e` | `extract_artifact` | 추출한 파일과 해시: `main.js` `3e02cf38…1ccf`(855 B), `preload.js` `ef7321e7…b246`, `renderer.js` `d1688701…7209`, `index.html`, `package.json` |
 
-## 1. 앱 구성
+REA 한계(Evidence에 명시): 정적 분석 결과일 뿐이며 런타임 등록이나 실행을 증명하지 않는다. 시맨틱 그래프의 커버리지 상태는 `unknown`이고 미해결 항목이 134개 있다. 통계 계산 규칙(R-3 이하)은 REA가 의미 단위로 추출해 주지 않았으므로 **[코드]** 근거에 의존한다.
+
+---
+
+## R-1. 호출 경로(IPC)
 
 | ID | 요구사항 | 근거 |
 |---|---|---|
-| A-1 | 앱은 `main.js`(855 B, 번들·압축됨), `preload.js`, `renderer.js`, `index.html`, `package.json`(`main: "main.js"`)으로 구성된다. | [REA] `ev_7f1e8f0c…` 추출 목록 |
-| A-2 | 통계 계산은 main 프로세스(`main.js`) 안의 번들된 내부 모듈에 있고, 그 모듈은 `summarize` 하나를 export한다. | [CODE] `main.js:1:78-332`(내부 모듈), 객체 export는 `main.js:1:620` 부근 · [REA] semantic node `destructure:/summarize`(`main.js:1:643-644`). 단, REA semantic 분석은 이 binding의 값을 `unknown-value`로 남김(unknown `jsrg_unknown_67302f2c…`) → 함수 본문은 [CODE]로만 확인 |
+| R-1.1 | 통계 기능은 IPC 채널 **`memo:summarize`** 하나로 제공된다. | [REA] `ev_b27cc697…` `ipc-channel` 노드. [REA] `ev_f0f9e039…` 리터럴 채널 1개 |
+| R-1.2 | main 프로세스는 `ipcMain.handle("memo:summarize", handler)`로 처리기를 등록한다(요청/응답 방식). | [REA] `ipc-handler` 노드, operation `handle`. [코드] `main.js` |
+| R-1.3 | preload가 `contextBridge.exposeInMainWorld("memo", { summarize })`로 렌더러에 `window.memo.summarize(text)`를 노출한다. 이 함수는 `ipcRenderer.invoke("memo:summarize", text)`를 호출하고 그 Promise를 그대로 돌려준다. | [REA] contextBridge API 1개, invoke 송신 1건이 handler와 짝을 이룸. [코드] `preload.js` |
+| R-1.4 | 렌더러는 `#analyze` 버튼을 클릭하면 `#memo` textarea의 값(문자열)을 넘긴다. | [코드] `renderer.js`, `index.html` |
+| R-1.5 | 처리기는 동기 함수이고 이벤트 객체(첫 인자)를 쓰지 않는다. 발신자(sender)도 검증하지 않는다. | [코드] `main.js`. [REA] sender validation 관찰 0건 |
 
-## 2. IPC 계약
-
-| ID | 요구사항 | 근거 |
-|---|---|---|
-| I-1 | 채널 이름은 정확히 `memo:summarize`이다. | [REA] `ev_4ed3b5a1…` observation `observe-ipc-handler`(main.js:1:676-699, `channel: "memo:summarize"`, `mode: handle`) |
-| I-2 | main 쪽은 `ipcMain.handle`(요청/응답형)로 등록한다. `ipcMain.on`/`send` 계열이 아니다. | [REA] 같은 observation `operation: "handle"`, edge `map-ipc-handler-registration`(main.js:1:650-700) |
-| I-3 | preload는 `contextBridge`로 `window.memo` 객체를 노출하고, 멤버는 `summarize` 하나다. `memo.summarize(text)`는 `ipcRenderer.invoke("memo:summarize", text)`를 그대로 돌려준다(Promise). | [REA] node `context-bridge-api`(preload.js:3:0-5:2, `api_key: memo`, `members: ["summarize"]`), observation `observe-ipc-channel-expression`(preload.js:4:23-65, `operation: invoke`) |
-| I-4 | renderer → main 송신과 main 처리기는 리터럴 채널 일치로 짝지어진다(유일 매칭). | [REA] edge `pair-ipc-literal-channel`(`pairing_basis: unique-exact-literal-channel`, `handler_path: main.js`). REA 한계: 정적 일치이며 런타임 등록을 증명하지 않음 |
-| I-5 | renderer는 `#memo` 입력값(문자열)을 보내고, 응답의 `lines`, `words`, `readingMinutes`, `tags[].tag`, `tags[].count`를 읽어 `"{lines}줄 · {words}단어 · 약 {readingMinutes}분 · #tag(count) …"` 형식으로 표시한다. | [CODE] `renderer.js:4-8` · [REA] semantic node `read:/memo/summarize`(renderer.js:5:22-43) |
-| I-6 | 처리기는 첫 인자(event)를 쓰지 않는다. 발신자 검증이 없다. | [CODE] `main.js:1:676-699` · [REA] summary `sender_validation_observations: 0` |
-| I-7 | 처리기는 동기적으로 결과 객체를 돌려준다. Electron의 `handle`이 이를 Promise로 감싸 renderer에 구조화 복제(structured clone)된 값으로 전달한다. | [CODE] 처리기 본문에 `await`/Promise 없음 · [INFER] Electron `ipcMain.handle` 의미론 |
-
-## 3. 입력
+## R-2. 입력
 
 | ID | 요구사항 | 근거 |
 |---|---|---|
-| IN-1 | 처리기는 두 번째 인자(renderer가 보낸 값)를 문자열로 바꾼 뒤 계산한다. 값이 `null` 또는 `undefined`이면 빈 문자열 `""`로, 그 밖에는 `String(값)`으로 바꾼다(예: `123` → `"123"`, `["a","b"]` → `"a,b"`, 일반 객체 → `"[object Object]"`). | [CODE] `main.js:1:685-698` (nullish 병합 후 `String` 변환) |
-| IN-2 | 재구현 모듈의 `summarize(input)`도 IN-1과 같은 변환을 먼저 적용한다. 문자열 입력이면 변환은 아무것도 바꾸지 않는다. | 설계 결정(재구현을 처리기와 같은 경계로 맞춤) |
+| R-2.1 | 입력은 처리기의 두 번째 인자 하나다. | [코드] |
+| R-2.2 | 입력이 `null` 또는 `undefined`이면 빈 문자열 `""`로 바꾼다. 그 밖의 값은 `String(value)`로 문자열화한다(예: 숫자 `42` → `"42"`). | [코드] `String(e ?? "")` |
+| R-2.3 | 실제 UI에서는 textarea 값이 들어가므로 입력은 항상 문자열이다. R-2.2는 다른 호출자에 대한 방어적 처리다. | [추론] |
 
-## 4. 출력
-
-| ID | 요구사항 | 근거 |
-|---|---|---|
-| O-1 | 결과는 일반 객체이며 키는 이 순서로 정확히 4개다: `lines`, `words`, `readingMinutes`, `tags`. | [CODE] `main.js:1:475` 부근 객체 리터럴 |
-| O-2 | `lines`, `words`, `readingMinutes`는 0 이상의 정수(number)다. `readingMinutes`는 1 이상이다. | [CODE] 아래 규칙에서 도출 |
-| O-3 | `tags`는 배열이며 원소는 키 순서 `tag`(string), `count`(number)인 객체다. 원소는 0~3개다. | [CODE] `main.js:1:78-332` |
-
-## 5. 계산 규칙
-
-### 5.1 lines — 내용이 있는 줄 수
+## R-3. 출력
 
 | ID | 요구사항 | 근거 |
 |---|---|---|
-| L-1 | 텍스트를 줄바꿈으로 나눈다. 줄바꿈은 `\n`(LF) 또는 `\r\n`(CRLF)이며, 둘이 섞여 있어도 각각 줄바꿈 하나로 본다. | [CODE] `main.js:1:355-369` |
-| L-2 | 단독 `\r`(옛 Mac 방식 CR)은 줄바꿈으로 보지 않는다. `U+2028`/`U+2029`도 줄바꿈이 아니다. | [INFER] L-1의 패턴이 `\r` 뒤에 `\n`이 올 때만 소비함 |
-| L-3 | 나눈 조각 중 앞뒤 공백을 제거(JavaScript `String.prototype.trim` 기준)했을 때 빈 문자열이 아닌 것만 센다. 공백·탭만 있는 줄, `U+3000`(전각 공백), `U+00A0`(NBSP)만 있는 줄은 세지 않는다. 남은 단독 `\r`도 trim 대상이므로 `"\r"`만 있는 조각은 세지 않는다. | [CODE] `main.js:1:370-393` · [INFER] trim의 공백 집합(WhiteSpace + LineTerminator) |
-| L-4 | 빈 문자열의 `lines`는 0이다. 끝에 줄바꿈이 있어도 빈 조각은 세지 않는다. | [INFER] L-1, L-3에서 도출 |
+| R-3.1 | 출력은 일반 객체 `{ lines, words, readingMinutes, tags }`이며 키 순서도 이와 같다. | [코드] |
+| R-3.2 | `lines`, `words`, `readingMinutes`는 0 이상의 정수다(`readingMinutes`는 1 이상). | [코드] |
+| R-3.3 | `tags`는 `{ tag: string, count: number }` 객체의 배열이고 원소는 최대 3개다. 각 객체의 키 순서는 `tag`, `count`다. | [코드] |
+| R-3.4 | 렌더러는 이를 `"{lines}줄 · {words}단어 · 약 {readingMinutes}분 · #tag(count) …"` 형식으로 표시한다. 이 표시는 재구현 범위에 포함하지 않는다. | [코드] `renderer.js` |
 
-### 5.2 words — 단어 수
+## R-4. 계산 규칙 (`text`는 R-2 적용 후의 문자열)
 
-| ID | 요구사항 | 근거 |
-|---|---|---|
-| W-1 | 텍스트 전체를 공백 문자 1개 이상의 연속으로 나누고, 빈 조각을 버린 뒤 그 개수를 센다. 공백 문자는 JavaScript 정규식 `\s`의 집합(탭, LF, CR, 공백, NBSP, `U+3000`, `U+2028`, `U+FEFF` 등 유니코드 공백 포함)이다. | [CODE] `main.js:1:406-437` |
-| W-2 | 단어는 공백 외 문자의 연속이다. 구두점만 있는 토큰(예: `—`, `...`)과 태그(`#foo`)도 단어 1개로 센다. 한글 어절도 공백 기준으로 센다(형태소 분리 없음). | [INFER] W-1에서 도출 |
-| W-3 | 빈 문자열과 공백만 있는 문자열의 `words`는 0이다. | [INFER] W-1에서 도출 |
-
-### 5.3 readingMinutes — 예상 읽기 시간(분)
+### R-4.1 `lines` — 내용이 있는 줄 수
 
 | ID | 요구사항 | 근거 |
 |---|---|---|
-| R-1 | `readingMinutes = max(1, ceil(words / 200))`. 분당 200단어 기준이며 최소 1분이다. | [CODE] `main.js:1:446-474` |
-| R-2 | 따라서 words 0 → 1, 200 → 1, 201 → 2, 400 → 2, 401 → 3. | [INFER] R-1에서 도출 |
+| R-4.1.1 | 정규식 `/\r?\n/`로 나눈다. 따라서 LF와 CRLF 모두 줄바꿈이고, **단독 CR(`\r`)은 줄바꿈이 아니다.** | [코드] |
+| R-4.1.2 | 나눈 조각 중 `String.prototype.trim()` 결과가 빈 문자열이 아닌 것만 센다. 공백만 있는 줄(스페이스, 탭, NBSP, 전각 공백 U+3000 등 JS가 공백으로 보는 문자)은 세지 않는다. | [코드] |
+| R-4.1.3 | 빈 문자열의 `lines`는 0이다. 끝에 붙은 줄바꿈 때문에 생기는 빈 조각도 세지 않는다. | [코드] + [추론](R-4.1.2에서 따라 나옴) |
 
-### 5.4 tags — 상위 태그
+### R-4.2 `words` — 단어 수
 
 | ID | 요구사항 | 근거 |
 |---|---|---|
-| T-1 | 태그는 `#` 바로 뒤에 오는, 다음 문자 1개 이상의 가장 긴 연속이다: 유니코드 문자(General Category `L*`: 한글·한자·라틴 등), 유니코드 숫자(`N*`: `Nd`, `Nl`, `No` — 예 `２`, `Ⅻ`, `①`), 밑줄 `_`. 유니코드(코드 포인트) 단위로 판정한다(서로게이트 쌍 문자도 한 문자). | [CODE] `main.js:1:121-162` (유니코드 플래그가 있는 전역 정규식) |
-| T-2 | `#` 앞 문자에는 제약이 없다(단어 경계 없음). `a#b`에서 `b`, `##x`에서 `x`, URL의 `page#top`에서 `top`이 태그다. | [INFER] T-1 패턴에 앞쪽 조건 없음 |
-| T-3 | 하이픈·마침표·작은따옴표·공백·결합 문자(`M*`, 예: 분해형 악센트 `U+0301`) 등은 태그를 끝낸다. `#tag-name` → `tag`. `#` 뒤에 허용 문자가 없으면 태그가 아니다. 전각 `＃`(`U+FF03`)는 `#`이 아니다. | [INFER] T-1에서 도출 |
-| T-4 | 검색은 왼쪽부터 겹치지 않게 진행한다. 줄 구분과 관계없이 텍스트 전체를 대상으로 한다. | [CODE] 전역 `matchAll` · [INFER] |
-| T-5 | 각 태그를 `String.prototype.toLowerCase()`(로캘 무관)로 소문자화한 값을 키로 개수를 센다. 따라서 `#Foo`, `#FOO`, `#foo`는 같은 태그 `foo`다. 한글은 대소문자가 없어 그대로다. 소문자화로 길이가 바뀌는 경우(예: `İ` → `i̇`)도 그 결과를 그대로 키로 쓴다. | [CODE] `main.js:1:165-178` |
-| T-6 | 정렬: `count` 내림차순, 같으면 `tag` 오름차순. `tag` 비교는 JavaScript 문자열 `<`/`>` 비교, 즉 **UTF-16 코드 단위 순서**다. `localeCompare`나 코드 포인트 순서가 아니다(예: 서로게이트 쌍 문자 `𝒜`(D835…)가 `ｱ`(FF71)보다 앞선다). | [CODE] `main.js:1:258-320` |
-| T-7 | 정렬 후 앞에서 최대 3개만 반환한다. 태그가 없으면 빈 배열이다. | [CODE] `main.js:1:321-331` |
-| T-8 | 반환되는 `tag`는 `#`을 뺀 소문자화된 문자열이고, `count`는 등장 횟수다. | [CODE] `main.js:1:78-332` |
+| R-4.2.1 | 정규식 `/\s+/`(JS 공백 문자 클래스, 유니코드 공백 포함)로 나눈 뒤 빈 조각을 버린 개수다. 즉 **공백이 아닌 문자가 연속된 덩어리의 수**와 같다. | [코드] + [추론](두 정의가 동치) |
+| R-4.2.2 | 구두점이나 `#태그`도 단어로 센다(예: `"#a,b"`는 1단어). 한글도 공백으로만 구분한다. | [추론] |
 
-## 6. 범위 밖 / 미확인
+### R-4.3 `readingMinutes` — 예상 읽기 시간(분)
+
+| ID | 요구사항 | 근거 |
+|---|---|---|
+| R-4.3.1 | `max(1, ceil(words / 200))`. 분당 200단어로 계산한다. | [코드] |
+| R-4.3.2 | 0~200단어는 1분, 201~400단어는 2분, 401단어는 3분이다. | [추론](R-4.3.1에서 계산) |
+
+### R-4.4 `tags` — 상위 3개 태그
+
+| ID | 요구사항 | 근거 |
+|---|---|---|
+| R-4.4.1 | 태그는 정규식 `/#([\p{L}\p{N}_]+)/gu`에 맞는 부분이다. `#` 뒤에 유니코드 문자(L), 숫자(N), `_`가 하나 이상 이어진다. 한글과 영문 모두 태그가 된다. | [코드] |
+| R-4.4.2 | 태그 본문은 허용되지 않는 첫 문자(공백, `-`, `.`, `#`, 결합 문자 M 등)에서 끝난다. 예: `#todo-list` → `todo`, `#a#b` → `a`와 `b`. | [코드] + [추론] |
+| R-4.4.3 | `#` 앞 문자는 제한이 없다. `mail#tag`의 `tag`, `##x`의 `x`도 태그다. `#` 뒤에 허용 문자가 없으면(`# ` 또는 끝의 `#`) 태그가 아니다. | [코드] + [추론] |
+| R-4.4.4 | 태그 이름은 `String.prototype.toLowerCase()`로 소문자화해서 집계한다(대소문자 구분 없음). `#Work`, `#WORK`, `#work`는 모두 `work`다. 출력 `tag`에는 `#`이 붙지 않은 소문자 이름이 들어간다. | [코드] |
+| R-4.4.5 | 정렬 1순위는 `count` 내림차순이다. | [코드] |
+| R-4.4.6 | 정렬 2순위(동점)는 `tag` 오름차순이며 **UTF-16 코드 단위 비교**(`<`, `>` 연산자)를 쓴다. `localeCompare`는 쓰지 않는다. 따라서 순서는 코드 값 순서인 `0-9`(0x30~) < `_`(0x5F) < `a-z`(0x61~) < 한글 음절(0xAC00~)이다. | [코드] + [추론](순서 예시) |
+| R-4.4.7 | 정렬한 뒤 앞의 3개만 남긴다. 태그가 없으면 빈 배열이다. | [코드] |
+
+## R-5. 범위 밖 / 미확인
 
 | ID | 내용 | 근거 |
 |---|---|---|
-| U-1 | 창 생성(640×480, preload 지정)과 `index.html` 로드는 통계 기능과 무관하므로 재구현하지 않는다. | [CODE] `main.js:1:701-` · [REA] summary `browser_windows: 1`, `preload_entrypoints: 1` |
-| U-2 | 정적 분석은 처리기가 런타임에 실제 등록·호출되는지 증명하지 않는다. 이는 `harness.mjs`로 원본 main 코드를 실행해 확인한다. | [REA] limitation "Electron relationships are derived from inert syntax…" |
-| U-3 | 구조화 복제가 불가능한 값(함수, Symbol 등)을 renderer가 보내면 Electron이 IPC 전송 단계에서 거부하므로 처리기에 도달하지 않는다. 재구현은 이 경우를 다루지 않는다. | [INFER] Electron IPC 의미론 |
-| U-4 | 매우 긴 입력에 대한 크기 제한이나 잘라내기는 없다. | [CODE] 길이 검사 없음 |
-
-## 7. 재구현 모듈 인터페이스
-
-- 파일: `summarize.mjs` (ES module, 외부 의존성 없음)
-- `export function summarize(input)` — IN-1/IN-2 변환 후 5장의 규칙으로 O-1~O-3 형태의 객체를 반환
-- `export const CHANNEL = "memo:summarize"` — I-1
+| U-1 | 원본은 메모를 저장하거나 파일·네트워크에 접근하지 않는다. 통계 함수는 순수 함수다. | [코드] + [REA] request/resource/config 관계 0건(정적 결과이므로 부재를 증명하지는 않음) |
+| U-2 | 실제 Electron 런타임에서 IPC 직렬화(structured clone)를 거친 뒤 렌더러가 받는 값의 동일성은 관찰하지 않았다. 반환값이 일반 객체와 숫자, 문자열로만 이루어져 있으므로 바뀌지 않을 것으로 본다. | [추론] |
+| U-3 | `toLowerCase`의 특수 매핑(예: `İ` → `i̇`)과 `\p{L}`/`\p{N}`의 범위는 실행하는 JS 엔진의 유니코드 버전을 따른다. 재구현도 같은 내장 기능을 쓰므로 같은 엔진에서는 결과가 일치한다. | [추론] |
