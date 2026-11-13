@@ -1,63 +1,66 @@
-# ShippingFee.dll 동작 명세
+# 동작 명세 (에이전트 답변)
 
-대상: `ShippingFee.dll` (SHA-256 `c81bf845ca43cd229434663e07657da58f9757c710ba3b543c13218e07003663`,
-MVID `8a946d53-b272-4ce6-b61e-b89b3fddc14d`, `.NETCoreApp,Version=v10.0`, IL-only)
+07-5 프롬프트에 대한 Claude Code(claude-opus-5-5) 답변을 그대로 옮겼습니다. 경로만 책 기준(C:/rea-labs)으로 바꿨습니다. 6.8.0 재실측에서는 에이전트가 명세를 파일이 아니라 답변으로 냈습니다.
 
-## 근거 표기
+세 가지 모두 끝났고, 원본과 재구현 결과가 33개 입력 모두에서 같습니다(**33/33 일치**).
 
-| 표기 | 의미 |
+## 1. 동작 명세: `ReaLab.Shipping.ShippingCalculator.CalculateFee(int weightGrams, string zone, bool express) : int`
+
+REA `inspect_managed_members`로 DLL을 정적으로만 분석했습니다. 대상 파일의 SHA-256은 `c81bf845…7003663`, MVID는 `8a946d53-…`입니다. 쓴 Evidence는 다음과 같습니다.
+- 메서드 본문의 CIL 명령어 목록: `ev_14eac301…`
+- 문자열 리터럴: `ev_ccc9db41…`
+- 외부 메서드 참조: `ev_025f9bfe…`
+- 위 셋의 원본 분석: `ev_4d465e47…`
+
+표의 구분은 이렇습니다.
+- **[확인]**: CIL 명령어, 상수, 문자열, 호출 대상을 Evidence에서 직접 읽은 내용입니다.
+- **[추론]**: 그 Evidence를 해석했거나 .NET 런타임이 어떻게 동작하는지에 기댄 내용입니다.
+
+| # | 규칙 | 근거 |
+|---|---|---|
+| R1 | `weightGrams > 0`이 아니면 `ArgumentOutOfRangeException("weightGrams")`를 던집니다. | **[확인]** IL_0000 `ldarg.0; ldc.i4.0; bgt.s`, 이어서 `ldstr "weightGrams"; newobj ArgumentOutOfRangeException(string); throw` |
+| R2 | 지역별 기본요금은 `"domestic"` 3000, `"jeju"` 6000, `"overseas"` 15000입니다. | **[확인]** `string.op_Equality`로 세 번 비교한 뒤 `ldc.i4 3000/6000/15000`, `stloc.2` |
+| R3 | 세 지역이 아니면 `ArgumentException("unknown zone", "zone")`을 던집니다. | **[확인]** IL_0050 `ldstr "unknown zone"; ldstr "zone"; newobj ArgumentException(string,string); throw` |
+| R3a | 지역 이름은 대소문자를 구분해 정확히 일치해야 합니다(`"Domestic"`은 오류). | **[추론]** `string.op_Equality`가 서수 비교라는 .NET의 의미에서 나온 해석입니다. |
+| R4 | 추가 단위 수는 `Math.Max(0, (weightGrams - 1) / 1000)`입니다. | **[확인]** `ldc.i4.0; ldarg.0; ldc.i4.1; sub; ldc.i4 1000; div; call Math.Max(int,int)` |
+| R4a | 결과적으로 1~1000g은 기본요금만 받고, 1000g을 넘을 때마다 1000g 단위로 한 칸씩 붙습니다(올림). | **[추론]** R1, R4와 정수 나눗셈의 버림 성질에서 이끌어 낸 해석입니다. |
+| R5 | 요금은 `기본요금 + 추가단위 × 1000`입니다. | **[확인]** `ldloc.0; ldc.i4 1000; mul; add; stloc.1` |
+| R6 | `express`가 참이면 `요금 × 3 / 2`이고, 정수 나눗셈이라 소수점 아래를 버립니다. | **[확인]** `ldarg.2; brfalse.s`, 이어서 `ldloc.1; ldc.i4.3; mul; ldc.i4.2; div` |
+| R7 | 산술은 32비트 int이고 오버플로를 검사하지 않습니다(값이 넘치면 음수로 돌아감). | **[확인]** 오버플로 검사 명령(`.ovf`)이 없고 `add`/`mul`/`sub`만 있습니다. **[추론]** 그래서 실제로 값이 넘쳐 음수가 됩니다. |
+| R8 | 결과는 `int` 하나로 반환합니다. | **[확인]** 시그니처 `i4(i4, string, bool)`, 마지막이 `ldloc.1; ret` |
+
+명령줄 진입점 `Program.<Main>$`은 이렇게 동작합니다.
+
+| # | 규칙 | 근거 |
+|---|---|---|
+| M1 | 인자가 2개보다 적으면 사용법 문자열을 출력하고 종료코드 1로 끝납니다. | **[확인]** `ldlen; ldc.i4.2; bge.s`, `ldstr "usage: …"; Console.WriteLine`, `ldc.i4.1; ret` |
+| M2 | 무게는 `int.Parse(args[0])`, 지역은 `args[1]`입니다. | **[확인]** `call Int32.Parse(string)` |
+| M2a | 무게 문자열은 앞뒤 공백과 `+`/`-` 부호를 허용합니다. 숫자가 아니면 FormatException, int 범위를 넘으면 OverflowException이 납니다. | **[추론]** `int.Parse`의 기본 동작에 기댄 내용입니다. |
+| M3 | 세 번째 인자가 있고 정확히 `"express"`일 때만 특송으로 계산합니다. | **[확인]** `ldlen > 2`이면 `args[2] == "express"`, 아니면 `false` |
+| M4 | `fee={요금}`을 출력하고 종료코드 0으로 끝납니다. | **[확인]** `"fee="` 리터럴, `AppendFormatted`, `WriteLine`, `ldc.i4.0; ret` |
+| M4a | `AppendFormatted<T>`의 T는 `int`로 보았습니다. | **[추론]** 제네릭 인스턴스 토큰(`0x2b000001`)의 실제 타입까지는 풀지 않았습니다. |
+| M5 | `CalculateFee`가 던진 예외는 아무도 잡지 않아 프로세스가 비정상 종료합니다. | **[확인]** 메서드에 예외 처리 구간이 0개입니다. **[추론]** 그래서 런타임이 "Unhandled exception"을 출력하고 종료합니다. |
+
+## 2. 재구현: `C:/rea-labs/dotnet-bin/fee.mjs`
+- `calculateFee(weightGrams, zone, express)`가 R1~R8을 구현합니다. 32비트 정수가 넘쳐 음수로 돌아가는 동작은 `|0`로, 0 방향 버림 나눗셈은 `Math.trunc`로 흉내 냈습니다.
+- `runCli(args)`가 M1~M5를 구현합니다. `int.Parse`는 정규식으로 근사했습니다.
+
+## 3. 비교: `C:/rea-labs/dotnet-bin/compare.mjs`
+33개 입력에서 원본(`dotnet.exe ShippingFee.dll …`)과 재구현의 출력, 종료코드, 예외 종류를 비교했습니다.
+
+| 분류 | 확인한 입력 |
 |---|---|
-| **[REA]** | REA Evidence로 직접 확인함. `inspect_managed_artifact` = `ev_867543fd…`, `inspect_managed_members` = `ev_ef83bcfe…` |
-| **[IL]** | REA가 보고한 파일 오프셋(Main 592, CalculateFee 716)의 CIL 바이트와 `#US` 문자열 힙을 직접 디코딩해서 확인함. REA 도구가 아니라 보조 스크립트로 읽었지만, 모든 분기 오프셋·상수·opcode 개수가 REA anchor/`opcode_counts`와 일치함 |
-| **[추론]** | CLR 의미론이나 메타데이터 정황에서 추론함. 정적 근거로는 확정되지 않음 |
+| 무게 구간 경계 | 1000g과 1001g, 2000g과 2001g, 10000g과 10001g |
+| 세 지역 | domestic, jeju, overseas 모두 |
+| 특송과 버림 | `1 domestic express` → 4500, `1001 jeju express` → 10500 |
+| `"Express"`·`"fast"` | 특송으로 인정되지 않고 일반 요금 |
+| 예외 4종 | 무게 0·음수, 알 수 없는 지역, 숫자가 아닌 무게, int 범위 초과 |
+| 인자 부족 | 사용법 출력, 종료코드 1 |
+| int 오버플로 | `2147483647 overseas` → `fee=-2147469296` |
+| `int.Parse` 허용 형식 | `" 1500 "`, `"+1500"` |
 
-REA deep provider(Ghidra/IDA)는 이 호스트에서 쓸 수 없었습니다(Ghidra 미설정, Windows Ghidra P0는 managed PE를 지원하지 않음, IDA 미설정). 그래서 C# 디컴파일은 하지 않았습니다.
+결과는 **33/33 일치**입니다.
 
-## 1. 계산 메서드
-
-- **[REA]** `ReaLab.Shipping.ShippingCalculator.CalculateFee(int32, string, bool) : int32`, 토큰 `0x06000003`, static(flags 150), 소속 타입은 abstract sealed(정적 클래스, flags 1048961)
-- **[REA]** 파라미터 이름 이전의 시그니처만 확인됨. 파라미터 이름 `weightGrams`/`zone`/`express`는 **[IL]** 예외 인수 문자열과 Main 사용법 문자열에서 가져옴
-- **[REA]** 필드 접근이 없고(`field_accesses: []`), 외부 호출은 `String.op_Equality`, `Math.Max`(이름: `Max(i4,i4)`), 예외 생성자 두 개뿐임 → 상태가 없는 순수 함수
-
-## 2. 규칙
-
-### R1. 무게 검증
-- **[REA]** IL_0002 `bgt.s` 분기: `weightGrams > 0`이면 계속 진행함. 그렇지 않으면 IL_0009에서 `newobj 0x0a000016`(`.ctor(string)`) 후 `throw`
-- **[IL]** 생성자 인수는 `"weightGrams"`
-- **[추론]** 예외 타입은 `System.ArgumentOutOfRangeException(paramName)`. REA는 TypeRef 이름을 풀어서 보여 주지 않았고, 단일 string 생성자와 파라미터 이름 인수 패턴으로 추정함
-- 규칙: `weightGrams <= 0` → 예외
-
-### R2. 지역별 기본 요금
-- **[REA]** `op_Equality`를 3회 연달아 호출하고, 각각 `brtrue.s`로 IL_0056/0064/0072로 분기함. 각 분기의 상수는 `3000`, `6000`, `15000`. 어느 것도 아니면 IL_0080 → `newobj 0x0a000017`(`.ctor(string,string)`) 후 `throw`
-- **[IL]** 비교 문자열 순서: `"domestic"` → 3000, `"jeju"` → 6000, `"overseas"` → 15000. 예외 인수는 `("unknown zone", "zone")`
-- **[추론]** `String.op_Equality`는 ordinal 비교이므로 대소문자와 공백을 구분함(`"Jeju"`, `" jeju"`는 알 수 없는 지역). `zone == null`이면 세 비교가 모두 false라서 같은 예외가 남
-- **[추론]** 예외 타입은 `System.ArgumentException(message, paramName)`
-- 확인 순서: 무게 검증(R1)이 지역 검증보다 먼저 일어남 **[REA]**(IL_0002가 IL_0015보다 앞섬)
-
-### R3. 무게 추가 요금
-- **[IL]** `extraUnits = Math.Max(0, (weightGrams - 1) / 1000)`, `fee = base + extraUnits * 1000`
-- **[REA]** 상수 `1000`이 두 번 나옴(IL_0101, IL_0114). `Max(i4,i4)` 호출 1회, `sub` 1회, `div` 2회, `mul` 2회, `add` 1회
-- **[추론]** `div`는 int32 나눗셈이고 0 방향으로 버림함. R1 때문에 `weightGrams >= 1`이므로 `Max(0, …)`는 실제로 효과가 없음
-- 의미: 1~1000g은 추가 요금 없음, 1001~2000g은 +1000, … 즉 1000g 초과분에 대해 **1kg마다(올림) 1000원**
-- **[추론]** `add`/`mul`은 `.ovf`가 붙지 않은 opcode이므로(**[REA]** opcode 목록에 `add.ovf` 없음) 오버플로 시 int32로 wrap-around됨. 예: `overseas`에서 무게 ≥ 2,147,469,001이면(`floor((w-1)/1000)*1000 + 15000 > 2^31-1`) 결과가 음수가 됨. 런타임에서 2,147,483,647g overseas → `fee=-2147469296`로 확인함
-
-### R4. 특급(express) 할증
-- **[REA]** IL_0123 `brfalse.s`: `express == false`이면 그대로 반환함. **[REA]** `ldc.i4.3` 1회, `ldc.i4.2` 1회, `mul`, `div`
-- **[IL]** `fee = fee * 3 / 2`(곱셈 먼저, 그다음 int32 나눗셈)
-- **[추론]** 1.5배, 소수점 이하 버림(0 방향). `fee * 3`도 unchecked라서 fee > 715,827,882이면 wrap됨
-- 결과를 int32로 반환함
-
-## 3. 진입점(`Program.<Main>$`) — CLI
-
-- **[REA]** 진입점 토큰은 `0x06000001`이고 `CalculateFee`를 호출함(call edge)
-- **[IL]** `args.Length < 2` → `"usage: ShippingFee <weightGrams> <zone> [express]"`를 출력하고 종료 코드 1
-- **[IL]** `weight = int.Parse(args[0])`, `zone = args[1]`, `express = args.Length > 2 && args[2] == "express"`. 네 번째 이후 인수는 무시함
-- **[IL]** 출력은 보간 문자열 `$"fee={fee}"` → `WriteLine`, 종료 코드 0
-- **[추론]** `int.Parse`는 `NumberStyles.Integer`와 현재 culture를 사용함. 앞뒤 공백과 앞쪽 부호를 허용하고, 숫자가 아니면 `FormatException`, int32 범위를 벗어나면 `OverflowException`
-- **[추론]** `CalculateFee`의 예외는 처리하지 않으므로 런타임의 unhandled exception이 됨(stderr에 `Unhandled exception. <Type>: …`, 0이 아닌 종료 코드)
-- **[추론]** `express`도 ordinal 비교이므로 `"Express"`는 일반 배송으로 처리함
-
-## 4. 남은 불확실성과 런타임 대조
-- 예외 타입 이름(R1, R2, int.Parse)은 정적 근거로는 확정되지 않았습니다. `compare.mjs`로 원본을 실행해 보니(REA Evidence가 아닌 런타임 관찰) 예외는 `ArgumentOutOfRangeException`, `ArgumentException`, `FormatException`, `OverflowException`으로, 추론과 일치했습니다.
-- 대소문자 구분, express 플래그 처리, int32 wrap-around도 런타임에서 같은 결과를 확인했습니다(93/93).
-- `int.Parse`의 culture 의존성(음수 부호 문자 등)은 실행 환경에 따라 달라질 수 있습니다. 테스트는 이 호스트의 culture에서만 했습니다.
+**한계:**
+- 비교는 예외 메시지 전문이 아니라 예외 타입 이름까지만 했습니다.
+- `int.Parse`의 문화권별 형식(예: 전각 숫자)은 재구현에 넣지 않았습니다.

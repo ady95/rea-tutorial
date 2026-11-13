@@ -1,59 +1,53 @@
-// Runs the original ShippingFee.dll and the fee.mjs re-implementation on the same inputs and compares.
+// 원본 ShippingFee.dll 과 fee.mjs 재구현을 여러 입력으로 비교한다.
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import path from 'node:path';
 import { runCli } from './fee.mjs';
 
-const DOTNET = 'dotnet';
-const DLL = join(dirname(fileURLToPath(import.meta.url)), 'ShippingFee.dll');
+const DOTNET = 'C:/tools/dotnet/dotnet.exe';
+const DLL = path.join(path.dirname(fileURLToPath(import.meta.url)), 'ShippingFee.dll');
 
-const CASES = [
-  // weight boundaries per zone
-  ...['domestic', 'jeju', 'overseas'].flatMap((z) =>
-    [1, 500, 1000, 1001, 1999, 2000, 2001, 5500, 10000, 10001].flatMap((w) => [[String(w), z], [String(w), z, 'express']])),
-  // express rounding (odd base after extra)
-  ['3001', 'domestic', 'express'], ['1001', 'jeju', 'express'], ['999999', 'overseas', 'express'],
-  // express flag variants
-  ['1500', 'domestic', 'Express'], ['1500', 'domestic', 'EXPRESS'], ['1500', 'domestic', 'fast'], ['1500', 'domestic', 'express', 'extra'],
-  // invalid weight
-  ['0', 'domestic'], ['-1', 'jeju'], ['-2147483648', 'overseas'], ['0', 'mars'],
-  // invalid zone (case/whitespace sensitive)
-  ['1000', 'mars'], ['1000', 'Domestic'], ['1000', 'JEJU'], ['1000', ' jeju'], ['1000', ''],
-  // int.Parse behaviour
-  ['+1500', 'domestic'], [' 1500 ', 'domestic'], ['007', 'jeju'], ['1.5', 'domestic'], ['abc', 'domestic'], ['', 'domestic'],
-  ['2147483648', 'domestic'], ['1e3', 'domestic'],
-  // int32 overflow edges
-  ['2147483647', 'domestic'], ['2147483647', 'overseas'], ['2147468001', 'overseas'], ['2147468000', 'overseas'],
-  ['715827882', 'domestic', 'express'], ['715830000', 'domestic', 'express'], ['2147483647', 'overseas', 'express'],
-  // usage
-  [], ['1000'],
+const cases = [
+  // 기본 요금 / 구간 경계
+  ['1', 'domestic'], ['1000', 'domestic'], ['1001', 'domestic'], ['2000', 'domestic'],
+  ['2001', 'domestic'], ['5500', 'domestic'], ['1', 'jeju'], ['1000', 'jeju'],
+  ['1001', 'jeju'], ['3000', 'jeju'], ['1', 'overseas'], ['10000', 'overseas'],
+  ['10001', 'overseas'],
+  // 특송 (3/2 배, 정수 버림)
+  ['1', 'domestic', 'express'], ['1001', 'domestic', 'express'], ['1001', 'jeju', 'express'],
+  ['2500', 'overseas', 'express'], ['999999', 'overseas', 'express'],
+  // 세 번째 인자가 정확히 "express" 가 아니면 일반
+  ['1001', 'domestic', 'Express'], ['1001', 'domestic', 'fast'],
+  // 오류 경로
+  ['0', 'domestic'], ['-5', 'jeju'], ['100', 'Domestic'], ['100', 'busan'],
+  ['abc', 'domestic'], ['99999999999', 'domestic'],
+  // 인자 부족
+  ['100'], [],
+  // int32 오버플로 (unchecked 산술)
+  ['2147483647', 'overseas'], ['2147483647', 'overseas', 'express'],
+  ['1500000000', 'domestic', 'express'],
+  // int.Parse 의 공백/부호 허용
+  [' 1500 ', 'domestic'], ['+1500', 'domestic'],
 ];
 
 function runOriginal(args) {
-  const p = spawnSync(DOTNET, [DLL, ...args], { encoding: 'utf8' });
-  if (p.error) throw p.error;
-  const stdout = p.stdout.trim();
-  const m = /Unhandled exception\.\s+([\w.]+)/.exec(p.stderr);
-  if (m) return { stdout: '', exitCode: null, error: m[1] };
-  return { stdout, exitCode: p.status, error: null };
+  const r = spawnSync(DOTNET, [DLL, ...args], { encoding: 'utf8' });
+  const m = /Unhandled exception\.\s+System\.(\w+)/.exec(r.stderr ?? '');
+  if (m) return { exitCode: null, stdout: '', error: m[1] };
+  return { exitCode: r.status, stdout: (r.stdout ?? '').trim(), error: null };
 }
 
-const show = (r) => (r.error ? `throw ${r.error}` : `${JSON.stringify(r.stdout)} (exit ${r.exitCode})`);
+const fmt = (o) => (o.error ? `throw ${o.error}` : `exit=${o.exitCode} "${o.stdout}"`);
 
 let pass = 0;
-const rows = [];
-for (const args of CASES) {
+const rows = cases.map((args) => {
   const orig = runOriginal(args);
-  const mine = runCli(args);
-  const ok = orig.error === mine.error && orig.stdout === mine.stdout && orig.exitCode === mine.exitCode;
-  if (ok) pass++;
-  rows.push({ ok, args, orig, mine });
-}
+  const re = runCli(args);
+  const same = orig.error === re.error && orig.exitCode === re.exitCode && orig.stdout === re.stdout;
+  if (same) pass++;
+  return { input: args.map((a) => JSON.stringify(a)).join(' ') || '(none)', original: fmt(orig), reimpl: fmt(re), match: same ? 'OK' : 'DIFF' };
+});
 
-const w = Math.max(...rows.map((r) => JSON.stringify(r.args).length));
-for (const r of rows) {
-  const line = `${r.ok ? 'PASS' : 'FAIL'}  ${JSON.stringify(r.args).padEnd(w)}  original=${show(r.orig)}`;
-  console.log(r.ok ? line : `${line}\n      reimpl=${show(r.mine)}`);
-}
-console.log(`\n${pass}/${rows.length} cases match`);
-process.exit(pass === rows.length ? 0 : 1);
+console.table(rows);
+console.log(`\n${pass}/${cases.length} 일치`);
+process.exit(pass === cases.length ? 0 : 1);
