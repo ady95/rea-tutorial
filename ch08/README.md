@@ -1,6 +1,6 @@
 # 8장. Android 애플리케이션 역공학
 
-검증 환경: REA 6.4.0 · Windows 11 · Microsoft OpenJDK 21.0.12.1 · jadx-headless-mcp 0.7.1 · 2026-10-13
+검증 환경: REA 6.8.0 · Windows 11 · Microsoft OpenJDK 21.0.12.1 · jadx-headless-mcp 0.7.1 · 2026-11-13 (macOS 26.6.2 · OpenJDK 21.0.13 확인)
 
 대상: Appium ApiDemos 6.0.18 (Apache-2.0) — https://github.com/appium/android-apidemos/releases/download/v6.0.18/ApiDemos-debug.apk
 SHA-256 A9EECF37B26CD084855C530DB81C2BB1B91F4C1B095A04F47AA7C20E2791F686
@@ -9,6 +9,15 @@ SHA-256 A9EECF37B26CD084855C530DB81C2BB1B91F4C1B095A04F47AA7C20E2791F686
 $env:JAVA_HOME = "C:/tools/jdk-21.0.12.1+1"
 $env:REA_JADX_MCP_JAR = "C:/tools/jadx-headless-mcp-0.7.1-all.jar"
 rea inspect-android-package C:/rea-labs/android/ApiDemos-debug.apk --filter-output normalized_result.package_name
+```
+
+macOS (JAVA_HOME은 압축을 푼 JDK 폴더 아래 `Contents/Home`):
+
+```bash
+export JAVA_HOME="$HOME/tools/jdk-21.0.13.0.2+1/Contents/Home"
+export REA_JADX_MCP_JAR="$HOME/tools/jadx-headless-mcp-0.7.1-all.jar"
+rea doctor --provider jadx
+rea inspect-android-package ~/rea-labs/android/ApiDemos-debug.apk --filter-output normalized_result.package_name
 ```
 
 | 파일 | 본문 |
