@@ -1,20 +1,24 @@
-// Independent re-implementation written from SPEC.md only.
+// Independent implementation written from SPEC.md only.
 
 const HEADER = "id,title";
-const EOL = "\n";
+const LF = "\n";
 
 function quoteField(value) {
-  return '"' + String(value).split('"').join('""') + '"';
+  let text = String(value);
+  let escaped = "";
+  for (const ch of text) {
+    escaped += ch === '"' ? '""' : ch;
+  }
+  return '"' + escaped + '"';
 }
 
 export function toCsv(notes) {
-  const lines = [HEADER];
-  for (const note of notes) {
-    lines.push(String(note.id) + "," + quoteField(note.title));
+  if (notes === null || notes === undefined || typeof notes.map !== "function") {
+    throw new TypeError("toCsv expects an array of notes");
   }
-  let out = "";
-  for (const line of lines) {
-    out += line + EOL;
+  let out = HEADER + LF;
+  for (const note of notes) {
+    out += String(note.id) + "," + quoteField(note.title) + LF;
   }
   return out;
 }
